@@ -22,18 +22,20 @@ clr_led:; subroutine to clear the strip
 	cpi counter,30
 	brne clr_loc
 	rcall led_write
+	rcall delay
 	sbiw yl,30 ;point to the 1st memory loc allocated
 	pop pos ;recover thee previous pos value
 	ret ;return to caller
 led_write:
 	clc ;clear carry flag
+	push counter
 	ldi byte_counter,3;counts three bytes
 	ldi pos, 10 ; we'l send 30 bytes
 	ld_byte:
 	ldi bit_counter,8 ;load bit counter
 	ld led,x+ ;load the first byte of data
 	check_bit:
-	ror led ;rotate the data
+	rol led ;rotate the data
 	brcc bit_is0
 	rcall bit_1 ;else its a 1 snd bit_1 seuence
 	rjmp cont ;jump to the cont lable
@@ -44,13 +46,15 @@ led_write:
 	brne check_bit ;if no then continue checking the bits
 
 	dec byte_counter ;have we finished loading one byte
-	brne ld_byte ;if no then load anothe byte
+	brne ld_byte ;if yes then load anothe byte
 
 	ldi byte_counter,3 ;reload the counters
 	ldi bit_counter, 8 ;reload the counters
 	dec pos ;have we reached the 10th led?
 	brne ld_byte ;load till the 10th led
 	rcall latch ;show the annimation
+	sbiw xl,30 ;reset the x pointer to point to the innitial mem loc
+	pop counter
 	ret ;return to caller
 bit_1: ;subroutine to send a bit 1
 	sbi ledcntr,ledpin
@@ -130,27 +134,22 @@ main:
 
 	sbi DDRD,ledpin
 	ldi xh,high(led_data)
-	ldi xl,high(led_data)
+	ldi xl,low(led_data)
 	ldi yh,high(led_data)
 	ldi yl,low(led_data) ;init pointers x and y register
 
-loop_atn:rcall clr_led ;clear the 10 leds
+	rcall clr_led ;clear the 10 leds
 
 	ldi r19,255
-fw_red:	std y+1,r19 ;write to the red led of each chip
+	ldi counter,10
+fw_red:std y+1,r19 ;write to the red led of each chip
 	adiw yl,3 ;progress the counter by 3 illitertions always
-	dec counter
-	cpi counter, 20 ;check if the counter has moved 10 times
+	dec counter;
 	rcall led_write ;illusion of moving red light left to right
 	rcall delay ;
 	brne fw_red ;continue loading red
 	sbiw yl,30 ;points to 1st mem loc
-
-
-
-	adiw yl,29 ;point to the last allocated mem loc we are now pointed at green last led
-	rcall  clr_led ;clear the strip
-	rjmp  loop_atn ;loop paying the annimation
+loop_atn:rjmp  loop_atn ;loop paying the annimation
 
 
 
