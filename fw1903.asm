@@ -4,6 +4,7 @@
 .def led = r20
 .def bit_counter = r21
 .def byte_counter =r22
+.def leddata_reg = r19
 .equ ledcntr = PORTD
 .equ ledpin = 4
 .dseg
@@ -21,14 +22,11 @@ clr_led:; subroutine to clear the strip
 	inc counter
 	cpi counter,30
 	brne clr_loc
-	rcall led_write
-	rcall delay
 	sbiw yl,30 ;point to the 1st memory loc allocated
 	pop pos ;recover thee previous pos value
 	ret ;return to caller
 led_write:
 	clc ;clear carry flag
-	push counter
 	ldi byte_counter,3;counts three bytes
 	ldi pos, 10 ; we'l send 30 bytes
 	ld_byte:
@@ -54,7 +52,6 @@ led_write:
 	brne ld_byte ;load till the 10th led
 	rcall latch ;show the annimation
 	sbiw xl,30 ;reset the x pointer to point to the innitial mem loc
-	pop counter
 	ret ;return to caller
 bit_1: ;subroutine to send a bit 1
 	sbi ledcntr,ledpin
@@ -123,9 +120,9 @@ delay:
 	outer_1:
 	ldi r24,166
 	inner_1:
-	dec r19
+	dec r24
 	brne inner_1
-	dec r18
+	dec r23
 	brne outer_1
 	ret ;return to caller
 main:
@@ -140,13 +137,13 @@ main:
 
 	rcall clr_led ;clear the 10 leds
 
-	ldi r19,255
+	ldi leddata_reg,255
 	ldi counter,10
-fw_red:std y+1,r19 ;write to the red led of each chip
+fw_red:std y+1,leddata_reg ;write to the red led of each chip
 	adiw yl,3 ;progress the counter by 3 illitertions always
-	dec counter;
 	rcall led_write ;illusion of moving red light left to right
 	rcall delay ;
+	dec counter
 	brne fw_red ;continue loading red
 	sbiw yl,30 ;points to 1st mem loc
 loop_atn:rjmp  loop_atn ;loop paying the annimation
