@@ -4,7 +4,7 @@
 .def led = r20
 .def bit_counter = r21
 .def byte_counter =r22
-.def leddata_reg = r19
+.def brightness = r19
 .equ ledcntr = PORTD
 .equ ledpin = 4
 .dseg
@@ -26,6 +26,9 @@ clr_led:; subroutine to clear the strip
 	pop pos ;recover thee previous pos value
 	ret ;return to caller
 led_write:
+	push counter
+	ldi counter, 3 ;will help us light 20 leds
+	ld_30leds:
 	clc ;clear carry flag
 	ldi byte_counter,3;counts three bytes
 	ldi pos, 10 ; we'l send 30 bytes
@@ -50,8 +53,12 @@ led_write:
 	ldi bit_counter, 8 ;reload the counters
 	dec pos ;have we reached the 10th led?
 	brne ld_byte ;load till the 10th led
-	rcall latch ;show the annimation
+	;rcall latch ;show the annimation
 	sbiw xl,30 ;reset the x pointer to point to the innitial mem loc
+	dec counter
+	brne ld_30leds
+	rcall latch
+	pop counter
 	ret ;return to caller
 bit_1: ;subroutine to send a bit 1
 	sbi ledcntr,ledpin
@@ -116,9 +123,9 @@ latch:
 	pop r22
 	ret ;return to caller
 delay:
-	ldi r23,20
+	ldi r23,255
 	outer_1:
-	ldi r24,166
+	ldi r24,255
 	inner_1:
 	dec r24
 	brne inner_1
@@ -135,18 +142,56 @@ main:
 	ldi yh,high(led_data)
 	ldi yl,low(led_data) ;init pointers x and y register
 
-	rcall clr_led ;clear the 10 leds
-
-	ldi leddata_reg,255
-	ldi counter,10
-fw_red:std y+1,leddata_reg ;write to the red led of each chip
+	ldi brightness,125
+lp_antn:rcall clr_led ;clear the 10 leds
+	rcall delay
+	rcall delay
+ld_again:ldi counter,10
+fw_red:std y+1,brightness ;write to the red led of each chip
 	adiw yl,3 ;progress the counter by 3 illitertions always
 	rcall led_write ;illusion of moving red light left to right
 	rcall delay ;
+	rcall delay
+	rcall delay
 	dec counter
 	brne fw_red ;continue loading red
 	sbiw yl,30 ;points to 1st mem loc
-loop_atn:rjmp  loop_atn ;loop paying the annimation
 
+	rcall clr_led ;clear the strip
+	rcall delay
+	rcall delay
+	rcall delay
 
+	adiw yl,31;point to the 31st element
+	ldi counter,10
+rv_red:	sbiw yl,3
+	st y,brightness
+	rcall led_write
+	rcall delay
+	rcall delay
+	rcall delay
+	dec counter
+	brne rv_red
+	sbiw yl,2 ;points 1 less to the allocated memory
+	rcall delay
+	rcall delay
+	rcall delay
 
+	rcall clr_led
+	ldi counter 10
+fw_blue:std y+1,brightness
+	adiw yl,3
+	rcall led_write
+	rcall delay
+	rcall delay
+	rcall delay
+	rcall delay
+	rcall delay
+	dec counter
+	brne fw_blue
+	adiw yl,1 ;point to the last +1 alocatedmem loc
+
+	ldi counter 10
+rv_blue:sbiw,3
+	st y,brightness
+	
