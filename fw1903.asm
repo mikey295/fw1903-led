@@ -1,11 +1,12 @@
 .include "tn2313def.inc"
-.def pos = r17
+.def pos = r25
 .def counter = r18
 .def led = r20
 .def bit_counter = r21
 .def byte_counter =r22
 .def brightness = r19
 .def zero_reg =r4
+.def colour = r6
 .equ ledcntr = PORTD
 .equ ledpin = 4
 .dseg
@@ -16,6 +17,7 @@ rjmp main
 
 clr_led:; subroutine to clear the strip
 	push pos ;store the previous pos
+	push counter
 	ldi pos,0
 	mov counter,pos
 	clr_loc:
@@ -24,6 +26,7 @@ clr_led:; subroutine to clear the strip
 	cpi counter,30
 	brne clr_loc
 	sbiw zl,30 ;point to the 1st memory loc allocated
+	pop counter
 	pop pos ;recover thee previous pos value
 	ret ;return to caller
 led_write:;does not contain latch so it should be called from the main code space
@@ -51,7 +54,7 @@ led_write:;does not contain latch so it should be called from the main code spac
 
 	dec pos
 	brne ld_led
-	sbiw yl,30 ;reset it to point to mem adress 1st alocated 0x0060
+	sbiw xl,30 ;reset it to point to mem adress 1st alocated 0x0060
 	pop pos
 	ret ;return to caller
 
@@ -142,6 +145,8 @@ main:
 	ldi xl,low(led_data)
 	ldi yh,high(led_data)
 	ldi yl,low(led_data) ;init pointers z, x and y register
+	ldi r16,1
+	mov colour,r16
 	ldi r16,0
 	mov zero_reg,r16 ;clear register 4 for use in pointer calcs
 	ldi brightness,100
@@ -154,7 +159,8 @@ check_led:
 
 	cpi pos,21
 	brlo bank_2 ;if its less than 20 then it belongs in bank 2
-	brsh is_bank_3
+	cpi pos,31
+	brlo is_bank_3
 is_bank_3:
 	rjmp bank_3 ;this is because branch can oly jump+-64 bytes
 
@@ -165,6 +171,7 @@ bank_1:
 	mov r5,r3 ;getting ready to multiply  by 3
 	lsl r3 ;multiply by 2
 	add r3,r5 ;complete the multiplication by 3 this gives you the last color of the number geneated
+	sub r3,colour ;this points to the colour itelf as we always start at adress loc1
 	add yl,r3
 	adc yh,zero_reg ;points to the numbers blue light
 	rcall clr_led ;all the mem locs are zerod
@@ -192,7 +199,8 @@ bank_2:
 	mov r5,r3 ;move the contens to get ready for multiplication
 	lsl r3 ;multiply by 2
 	add r3,r5 ;complete the multiplication by 3
-	add yl,r3
+	sub r3,colour; when added will point to the colour itself
+	add yl,r3;
 	adc yh,zero_reg ;point to the blue led of the index led to be lit
 	rcall clr_led ;clear the leds
 	rcall led_write ;write the first blank
@@ -209,10 +217,11 @@ bank_2:
 bank_3:
 	ldi r16,20 ;numbe well suntract from pos to get led index
 	mov r2,r16 ;copy it so it wount be overwritten
-	sub r3,r2 ;create the index
 	mov r3,pos ;copy to another register so we dont overide it
+	sub r3,r2 ;creates the index
 	mov r5,r3 ;copy the number to the register for multiplication purposes
 	lsl r3 ;r3*2
+	sub r3,colour ;helps us point to the colour itself in memory
 	add r3,r5 ;complete multiplication by 3
 	add yl,r3
 	adc yh,zero_Reg ;point to the blue light of the indexed led
@@ -228,15 +237,16 @@ bank_3:
 	rcall delay
 	sub yl,r3
 	sbc yh,zero_reg ;point to the initial mem loc it was in
+	rjmp cont_1
 cont_1:
-	inc pos
-	cpi pos,30 ;have we reached 30 leds?
+	inc pos ;have we reached 30 leds?
+	cpi pos,31
 	brne is_led_check ;??? branch will fail due to range
 	rjmp cont_2 ;if it fails it jumps to cont_2
 is_led_check:
 	rjmp check_led ;this is due to branch +- 64 bytes jump constrains
 cont_2:
-	rjmp loop ;loops for ever 
+	rjmp loop; for ever 
 
 
 
