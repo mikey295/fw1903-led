@@ -7,8 +7,12 @@
 .def brightness = r19
 .def zero_reg =r4
 .def colour = r6
+.def on_led = r7
+.def rv_colour = r8
+.def fill_counter = r9
 .equ ledcntr = PORTD
 .equ ledpin = 4
+.equ end_memloc = 0x007E
 .dseg
 led_data: .byte 30 ;reserve 30 bytes
 .cseg
@@ -145,11 +149,16 @@ main:
 	ldi xl,low(led_data)
 	ldi yh,high(led_data)
 	ldi yl,low(led_data) ;init pointers z, x and y register
-	ldi r16,1
+	ldi r16,3
 	mov colour,r16
-	ldi r16,0
-	mov zero_reg,r16 ;clear register 4 for use in pointer calcs
+	clr zero_reg ;clear register 4 for use in pointer calcs
 	ldi brightness,100
+	ldi r16,30
+	mov on_led,r16 ;we use it to determine what leds are always on 
+	ldi r16,1
+	mov fill_counter,r16 ;this counter helps us to follow how to light the on_leds
+	ldi r16,3
+	mov rv_colour,r16 ;will be used to calculate the next adress thst the always on ld will be written to
 loop:
 	ldi pos,1
 check_led:
@@ -166,7 +175,6 @@ is_bank_3:
 
 bank_1:
 	push counter
-	ldi counter,9 ;??
 	mov r3,pos ;this shows us the led that we need to light not the place to point
 	mov r5,r3 ;getting ready to multiply  by 3
 	lsl r3 ;multiply by 2
@@ -242,11 +250,76 @@ cont_1:
 	inc pos ;have we reached 30 leds?
 	cpi pos,31
 	brne is_led_check ;??? branch will fail due to range
-	rjmp cont_2 ;if it fails it jumps to cont_2
 is_led_check:
 	rjmp check_led ;this is due to branch +- 64 bytes jump constrains
+
+	;__________________start of the second efect
+
+	ldi pos,1
+
+check_led_2:
+        clc ;clear the carry flag
+        cpi pos,11 ;check to determine what bank we will choose
+        brlo bnk1_p2 ;branch to this if pos is less than 10
+
+        cpi pos,21
+        brlo is_bnk2_p2 ;if its less than 20 then it belongs in bank 2
+        cpi pos,31
+        brlo is_bnk3_p2
+is_bnk2_p2:
+	rjmp cont_2
+is_bnk3_p2:
+	rjmp cont_2
+bnk1_p2:
+	push fill_counter
+	ldi r16,20 ;will be used to count the index of always on led
+	mov r2,r16 ;well use this to count the index of alway on led
+	mov r3,pos ;store the index to r3 moving led
+	mov r5,r3 ;copy to r5
+	lsl r3 ;multiply by 2
+	add r3,r5 ;multiply by 3 this p
+	sub r3,colour ;point to the colour of the index
+	add yl,r3
+	adc yh,zero_reg ;set pointer to that colors adress
+	st y,brightness ;write the first tens of the leds
+	rcall led_write ;write the first ten leds
+	rcall clr_led ;clear them for the second tens
+	rcall led_write ;send them
+	sub yl,r3
+	sbc yh,zero_reg ;set the y pointer to the first mem loc allocated
+	mov r3,on_led ;loads it with the value in on_led
+	sub r3,r2 ;creates the index of always on led
+	mov r5,r3
+	lsl r3 ;*2
+	add r3,r5;multiply by 3
+	sub r3,colour ;this creates where to point to the colour of always on led
+	add yl,r3
+	adc yh,zero_reg ;points to the first  green led of always on led
+	fill_rear:
+	st y,brightness ;write to that location
+	add yl,rv_colour
+	adc yh,zero_reg ;this points to the next colour in the always on led
+	dec fill_counter ;this also acts as a counter that will use to fill fro whwrw we are to last
+	brne fill_rear ;fill_rear colours again if the ointer is not yet zero
+	rcall latch ;show the pattern
+	rcall delay
+	;______________calculate retun adress
+	ldi r16,3
+	mov r3,r16
+	ldi r16,30
+	add r3,r16 ;this calculates the offset to decrement from pointer to point to the first element
+	sub yl,r3
+	sbc yh,zero_reg ;now the pointer point to the first element
+	pop fill_counter
+	rjmp cont_2 ;jump all other lables
 cont_2:
-	rjmp loop; for ever 
+	dec on_led
+	inc pos
+	cpi pos,31
+	brsh looping ; branch if it is reached
+looping:
+	rjmp loop ;repeat the two animations
+
 
 
 
